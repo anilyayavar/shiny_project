@@ -1,0 +1,631 @@
+---
+title: '120 Years of Olympics - by AKG'
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+    social: menu
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(plotly)
+library(ggtext)
+library(ggalt)
+library(treemapify)
+library(ggthemes)
+library(tidytext)
+library(shiny)
+library(flexdashboard)
+library(DT)
+library(ggpubr)
+
+olympics <- read_csv("athlete_events.csv")
+NOC_dat <- read_csv('noc_regions.csv')
+NOC_dat <- NOC_dat[,-3]
+
+ww <- data.frame(ww = c('Great depression','World-War I', 'World-War II', 
+                        'Soviet Afghan war', 'Suez Crisis, Hungarian Revolution'),
+                 start = c(1929, 1914, 1939, 1979, 1956),
+                 end = c(1933,1918, 1945, 1984, 1956))
+
+olympics %>%
+  group_by(Sex, Season, Year) %>%
+  summarise(count = n_distinct(ID), .groups = 'drop')  %>%
+  mutate(Year = factor(Year, levels = sort(unique(olympics$Year), decreasing = TRUE), ordered = TRUE)) -> olymp1
+
+olymp2 <- olympics %>%
+  group_by(Year, Season) %>%
+  summarise(Athletes = n_distinct(ID),
+            Events = n_distinct(Event),
+            Nations = n_distinct(NOC), .groups = 'drop')
+
+olymp3 <- olympics %>%
+  group_by(Sport, Season) %>%
+  summarise(partcipants = n_distinct(ID))
+
+olymp4 <- olympics %>%
+  filter(!is.na(Medal)) %>%
+  left_join(NOC_dat, by = 'NOC') %>%
+  group_by(region, Season, Medal) %>%
+  summarise(count = n_distinct(Event), .groups = 'drop') %>%
+  group_by(region, Season) %>%
+  mutate(tot = sum(count)) %>%
+  group_by(Season) %>%
+  slice_max(tot, n = 45) %>%
+  ungroup() %>%
+  mutate(Medal = factor(Medal, levels = c('Bronze', 'Silver', 'Gold'), ordered = TRUE),
+         region = reorder_within(region, count, Season))
+
+olymp4_1 <- olympics %>%
+  filter(Medal == 'Gold') %>%
+  left_join(NOC_dat, by = 'NOC') %>%
+  group_by(region, Season) %>%
+  summarise(tot = n_distinct(Event), .groups = 'drop') %>%
+  group_by(Season) %>%
+  slice_max(tot, n = 10) %>%
+  ungroup() %>%
+  mutate(region = reorder_within(region, tot, Season))
+
+
+olymp5 <- olympics %>%
+ select(Year, Season, Sport, Event) %>%
+  distinct() %>%
+  group_by(Year, Season) %>%
+  summarise(Total_events = n(),
+            Women_events = sum(grepl('women', Event, ignore.case = TRUE)), .groups = 'drop') %>%
+  mutate(Year = factor(Year, levels = sort(unique(olympics$Year), decreasing = TRUE), ordered = TRUE),
+         pc = Women_events/Total_events)
+
+
+olymp_tree <- olymp <- olympics %>%
+  group_by(Sport, Season) %>%
+  summarise(partcipants = n_distinct(ID), .groups = 'drop')
+
+
+```
+
+Overview  {data-orientation=rows}
+=====================================
+
+Row {data-width=100}
+--------------------------------------
+### Total athletes
+```{r}
+athl <- olympics %>% summarise(n = n_distinct(ID)) %>% pull(n)
+valueBox(value = scales::comma(athl), caption = "Athletes Participated", color = "green", icon = 'fa-swimmer')
+```
+
+### Total Olympic Games
+```{r}
+gams <- olympics %>% select(Games) %>% distinct() %>% nrow()
+valueBox(value = gams, caption = 'Total Games Organised', color = 'orange', icon = 'fa-calendar')
+```
+
+### Countries/NOCs participated
+```{r}
+nocs <- olympics %>% select(NOC) %>% distinct() %>% nrow()
+valueBox(value = nocs, caption = 'NOC/Nations participated', color = 'coral', icon = 'fa-globe')
+```
+
+### Medals won
+```{r}
+medls <- olympics %>% summarise(n = sum(!is.na(Medal))) %>% pull(n)
+valueBox(value = scales::comma(medls), caption = 'Medals Won', color = 'royalblue', icon = 'fa-medal')
+```
+
+Row{.tabset}
+-------------------------------------
+   
+### Introduction
+
+This is a dashboard prepared by me as part of capstone project learning both shiny and presenting visualisations on custom dashboards. 
+Several Visualisations have been prepared depicting journey of both version of olympic games -
+
+- Summer Olympics
+- Winter Olympics
+
+Users of this dashboard may scroll/navigate through various pages of visualisations available as page menu and further divided in tabsets in some pages.
+
+Source: 1. I have used the historical dataset on the modern Olympic Games available on kaggle at [this link](https://www.kaggle.com/heesoo37/120-years-of-olympic-history-athletes-and-results), including all the Games from Athens 1896 to Rio 2016. I could not find the data related to Tokyo Olympics 2020.
+
+2. Flag iconsets of countries, used on axis of charts have been used from ["http://www.senojflags.com"](http://www.senojflags.com).
+
+**Note** that the Winter and Summer Games were held in the same year up until 1992. After that, they staggered them such that Winter Games occur on a four year cycle starting with 1994, then Summer in 1996, then Winter in 1998, and so on. A common mistake people make when analyzing this data is to assume that the Summer and Winter Games have always been staggered.
+
+*Critics and Comments on this dashboard both are welcome.* Email: anilrini@gmail.com
+
+
+### Summer Olympics Sports
+
+```{r, fig.height= 8}
+renderDataTable(
+  olympics %>% filter(Season == 'Summer') %>% select(Sport) %>% distinct()
+)
+```   
+ 
+### Winter Olympics Sports
+    
+```{r}
+renderDataTable(
+  olympics %>% filter(Season == 'Winter') %>% select(Sport) %>% distinct()
+)
+```
+
+### Athelete information
+
+```{r, fig.height=8}
+renderDataTable(
+  olympics %>% left_join(NOC_dat, by = 'NOC') %>%
+  select(Name, Team, region, Games, Sport, Event, Medal) %>%
+  arrange(Name, Games, Medal) %>%
+  rename(Region = region)
+)
+```
+
+
+Journey of Olympics {data-icon="fa-chart-line"}
+====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+In the past 120 years Olympic Games have covered several milstones.  To see a brief overview of past 120 years' history, choose one Measure.
+
+```{r}
+selectInput('overview', label = 'Choose one Measure:',
+            choices = c('Athletes', 'Events', 'Nations'), selected = 'Nations')
+```
+
+Hover your mouse over each line for exact numbers.  You may also select Season by clicking on season trend-line or legend.
+
+It is clear that - 
+
+- Olympics didn't organise during WW-I and WW-II.
+- Participations again dipped during Soviet invasion of Afghan during 1980 mainly due to boycott of Games by US.
+
+Nonetheless, during the past 120 years Olympics games have came so far be it participation of nations or athletes or number of events organised.
+
+Column
+-------------------------------------
+    
+### Trend Over the 120 Years
+
+```{r}
+renderPlotly(
+  ggplotly(olymp2 %>%
+             ggplot() +
+             geom_line(aes(x = Year, 
+                           y = !! rlang::sym(input$overview), 
+                           group = Season, color = Season)) +
+             geom_rect(aes(xmin = start, xmax = end), fill = 'blue', 
+                       ymin = -15, ymax = case_when(
+                         input$overview == 'Nations' ~ 300,
+                         input$overview == 'Events' ~ 350,
+                         TRUE ~ 12000
+                       ), alpha = 0.2, data = ww) + 
+             geom_text(
+               aes(x = start, 
+                   y = c(5, 10, 15, 5, 20) * ifelse(input$overview == 'Athletes', 50, 1), 
+                   label = ww), 
+               data = ww, 
+               size = 3, vjust = 0, hjust = 0, nudge_x = 0
+             ) + 
+             geom_vline(
+               aes(xintercept = as.numeric(start)), 
+               data = ww,
+               colour = "grey50", alpha = 0.5
+             ) +
+             geom_point(aes(x = Year, y = !! rlang::sym(input$overview), color = Season)) +
+             scale_x_continuous(limits = c(1896, 2020), 
+                                breaks = (1896:2020)[(1896:2020) %% 8 == 0]) +
+             labs(y = input$overview) +
+             theme(legend.position = 'top')
+           )
+  )
+```
+
+Top-10 athletes {data-navmenu="🤸 Athletes"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+To see the Top-10 athletes who have won at least 5 Gold Medals, select Season of Games.
+
+```{r}
+selectInput("si_11", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+```
+
+
+We can see that there are 11 athletes who have 8 or more Gold in Summer games but there are only 8 athletes who have won 5 or more Gold in Winter Games.
+
+Column 
+---------------------------------------
+
+### Top athletes (with Most Gold)
+
+```{r, fig.width=9}
+
+
+renderPlot(
+  {
+    ol_dot <- olympics %>%
+      filter(Medal == 'Gold', Season == input$si_11) %>%
+      group_by(ID, Name, NOC) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      arrange(desc(count)) %>%
+      filter(count >= max(.$count[10], 5)) %>%
+      left_join(NOC_dat, by = 'NOC') %>%
+      mutate(l_1 = paste0('<img src = ', 
+                        gsub('___.*$', '', region), '-Flag.png width = "18" /><br> **', 
+                        gsub('___.*$', '', region), '**'))
+    
+    ggdotchart(
+      ol_dot,
+      x= 'Name', y = 'count',
+      color = 'NOC',
+      sorting = "descending",                       # Sort value in descending order
+      add = "segments",                             # Add segments from y = 0 to dots
+      rotate = TRUE,
+      dot.size = 7,                                 # Large dot size
+      label = ol_dot$count,                        # Add mpg values as dot labels
+      font.label = list(color = "white", size = 9, 
+                        vjust = 0.5),               # Adjust label parameters
+      ggtheme = theme_pubr()
+      ) +
+      theme_cleveland() +
+      theme(legend.position = 'none') +
+      scale_x_discrete(labels = rev(paste0(ol_dot$Name, ol_dot$l_1))) +
+      theme(axis.text.y = element_markdown(size = 10))  
+  }
+  
+)
+```
+
+
+
+
+
+Gender Participation {data-navmenu="🤸 Athletes"}
+=====================================
+
+
+Inputs {.sidebar}
+-------------------------------------
+
+To see the trend of participation of Women in Olympics, select Season of Games.
+
+```{r}
+selectInput("si_1", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+```
+ 
+It is clear that in the 120 years history of Olympics, Women participation has increased from nearly nil participation to equal i.e. 50% participation in 2016.
+
+Column
+-------------------------------------
+    
+### Male Vs. Female Participation
+    
+```{r, fig.width=10, fig.height=7}
+renderPlot(
+  olymp1 %>%
+      filter(Season == input$si_1) %>%
+      ggplot(aes(x = Year, fill = Sex,
+                 y = ifelse(Sex == "M",
+                            -count, count))) + 
+      geom_bar(stat = "identity") +
+      scale_y_discrete(labels = abs, limits = max(olymp1$count) * c(-1,1)) +
+      coord_flip() +
+      labs(x = "Games", fill = '', y = '') +
+      scale_colour_manual(values = c("pink", "steelblue"),
+                          aesthetics = c("colour", "fill")) +
+      theme(legend.position = 'bottom')
+)
+```
+
+
+
+Sports-Participation {data-navmenu="🤸 Athletes"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+To see the trend of participation of Atheletes in different Sports, select Season of Games.
+
+```{r}
+
+selectInput("si_2", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+
+```
+
+_Hover_ your mouse over the plot for number of participations per Sport.
+
+It is clear that among all athletes, the popular choice is
+
+- *Athletics* in Summer Season
+- *Ice Hockey* in Winter Season sports
+
+Note:  Obviously, the Choice also depends on the number of players per sport but that has not been analysed here due to lack of data for number of minimum players per Sport or Event type.
+
+Column
+-------------------------------------
+    
+### Number of atheletes across various Sports
+
+```{r}
+renderPlotly(
+  plot_ly(
+  olymp_tree %>% filter(Season == input$si_2),
+  labels = ~ Sport,
+  parents = NA,
+  values = ~ partcipants,
+  type = 'treemap',
+  hovertemplate = "Sport: %{label}<br>Count of Participants: %{value}<extra></extra>"
+  )
+)
+```
+
+Age-Factor {data-navmenu="🤸 Athletes"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+To see a **histogram** of distribution of age of participants, select Season of Games.
+
+```{r}
+selectInput("si_7", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+
+```
+Histogram can be seen in first tab.  Here bin-width is 1.  We can see that age of participants follow a nearly normal distribution, somewhat rightly (postively) skewed with Mode on `23 years` of age.
+
+To see whether the age matters in winning also, let's see the histogram of winners (any Medal) also.  Click second tab.
+
+Now, the histogram of age-distribution of medalists is also right-skewed with same modal value i.e. `23 years`, which shows that age of participant does not matter for winning.
+
+
+Column {.tabset}
+-------------------------------------
+
+### Distribution of age of participants
+
+```{r}
+renderPlotly(
+  ggplotly(
+    olympics %>%
+      filter(!is.na(Age)) %>%
+      select(ID, Age, Season) %>%
+      distinct() %>%
+      filter(Season == input$si_7) %>%
+      ggplot(aes(Age)) +
+      geom_histogram(fill = 'seagreen', color = 'black', binwidth = 1)
+  )
+)
+```
+
+### Distribution of age of winners
+
+```{r}
+renderPlotly(
+  ggplotly(
+    olympics %>%
+      filter(!is.na(Age), !is.na(Medal)) %>%
+      select(ID, Age, Season) %>%
+      distinct() %>%
+      filter(Season == input$si_7) %>%
+      ggplot(aes(Age)) +
+      geom_histogram(fill = 'seagreen', color = 'black', binwidth = 1)
+  )
+)
+```
+
+Height-Factor {data-navmenu="🤸 Athletes"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+In previous section, we have seen that age of participant doesn't really matter.  We may also want to see whether height of an athelete also matters?  Select Season
+
+```{r}
+selectInput("si_10", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+
+```
+
+Height of the participant especially in Summer Olympics seems having winning edge here.  Percent of participants of over 200 cm of height is more than others.  Interestingly, only one participant of 223 cms of height has participated and was successful in Top-3 positions.
+
+Column
+----------------------------------------
+
+### Percentage of Winning over Height of participants
+
+```{r}
+renderPlotly(
+  ggplotly(
+    olympics %>%
+      filter(!is.na(Height)) %>%
+      mutate(top3 = ifelse(is.na(Medal), 'No', 'Yes'),
+             row_id = row_number()) %>%
+      group_by(Height, Season, top3) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      group_by(Height, Season) %>%
+      mutate(pc = count/sum(count)) %>%
+      filter(Season == input$si_10) %>%
+      ggplot(aes(x = Height, fill = top3, y = pc)) +
+      geom_bar(stat = 'identity') +
+      scale_y_continuous(labels = scales::percent) +
+      scale_fill_manual(values = c('grey', 'seagreen')) +
+      theme(legend.position = 'none') +
+      labs(y = 'Percent won',
+           x = 'Height of Participant')
+  )
+)
+```
+
+
+
+Top-10 Countries {data-navmenu="🏅 Medals"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+To view Top-10 countries by winnings 
+- by *Gold* in first tab; and 
+- by count of *total medals* won in second tab, 
+
+select Season of Games.
+
+```{r}
+selectInput("si_4", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+
+```
+
+We can see **US** top the charts in *Summer Games* whereas **Russia** top in *Winter Games*
+
+Column {.tabset}
+-------------------------------------
+
+### Top-10 countries by Gold
+
+```{r}
+renderPlot({
+  olymp4_r <- olymp4_1 %>%
+    filter(Season == input$si_4) %>%
+    mutate(l_1 = paste0('<img src = ', 
+                        gsub('___.*$', '', region), '-Flag.png width = "25" /><br> **', 
+                        gsub('___.*$', '', region), '**'))
+  
+  ggdotchart(
+      olymp4_r,
+      y = 'tot', x = 'region',
+      color = '#c9b037',
+      sorting = "descending",                       # Sort value in descending order
+      add = "segments",                             # Add segments from y = 0 to dots
+      rotate = TRUE,
+      dot.size = 10,                                 # Large dot size
+      label = olymp4_r$tot,                        # Add mpg values as dot labels
+      font.label = list(color = "white", size = 9, 
+                        vjust = 0.5),               # Adjust label parameters
+      ggtheme = theme_pubr()
+      ) +
+      theme_cleveland() +
+    labs(x = '', y = '') +
+      theme(legend.position = 'none') +
+      scale_x_discrete(labels = rev(olymp4_r$l_1)) +
+      theme(axis.text.y = element_markdown(size = 10))
+  
+})
+```
+
+    
+### Top-10 countries by Total Medals
+
+```{r}
+renderPlot({
+  
+    olymp4 %>%
+      filter(Season == input$si_4) %>%
+      mutate(l_1 = paste0(gsub('___.*$', '', region), ' ',
+                          '<img src = ', 
+                        gsub('___.*$', '', region), '-Flag.png height = "20" />' 
+                        )) -> olymp4_r2
+    
+    olymp4_r2 %>%  
+      ggplot(aes(x = region, y = count, fill = Medal, label = count)) +
+      geom_col(position = 'stack') +
+      geom_text(size = 4, position = position_stack(vjust = 0.5)) +
+      scale_fill_manual(values=c("#cd7f32","gray70","#c9b037")) +
+      scale_x_discrete(labels = rev(unique(olymp4_r2$l_1))) +
+      coord_flip() +
+      theme(legend.position = 'top',
+            axis.text.y = element_markdown(size = 17)) +
+      labs(y = '', fill = '', x = '')
+  
+})
+```
+
+
+
+Gold-Beyond 60 {data-navmenu="🏅 Medals"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+In one of the previous sections we have seen that age-factor isn't really an advantage in winning.  
+
+To see, however, if any participant of age 60 years or more, has won Medal ever, select Season of Games.
+
+```{r}
+selectInput("si_6", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+```
+
+
+Column
+-------------------------------------
+
+### Has any athlete/participant over 60 years of age, won Gold?
+
+```{r}
+renderPlotly(
+  ggplotly(
+    olympics %>%
+      filter(Age >= 60, Medal == 'Gold', Season == input$si_6) %>%
+      left_join(NOC_dat, by = 'NOC') %>%
+      ggplot(aes( x = Sport, fill = region)) +
+      geom_bar()
+  )
+)
+```
+
+
+Exclusive Women Events {data-navmenu="🏟  Events"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+
+As we have seen that women participation has been increased over the years, we may also want to see the trend of women exclusive events in the olympic journey.  Select Season of Games.
+
+```{r}
+selectInput("si_5", label = "Choose Season:",
+            choices = c('Summer', 'Winter'), selected = 'Summer')
+
+```
+
+It is quite clear that women-centric events have increased over the years and nearly 50 % of the events organised now are exclusive to women, which is a good indication.
+
+Column
+-------------------------------------
+    
+### Exclusive Women Events
+
+```{r}
+renderPlotly(
+  ggplotly(
+    olymp5 %>%
+    filter(Season == input$si_5) %>%
+    ggplot(aes(x = Year)) +
+    geom_col(aes(y = Total_events), fill = 'gray50') +
+    geom_col(aes(y = Women_events), fill = 'hotpink', color = 'gray17', width = 0.6) +
+    coord_flip() +
+    labs(y = "<span style = 'color:#ff69b4;'>Exclusive Women Events</span>
+Vs. <span style = 'color:#2b2b2b;'>Total Events</span>") +
+  theme(axis.title.x = element_markdown())
+  )
+)
+```
+
+
