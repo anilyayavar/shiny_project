@@ -5,7 +5,7 @@ output:
     orientation: columns
     vertical_layout: scroll
     social: menu
-    source_code: TRUE
+    source_code: https://github.com/anilyayavar/shiny_project
 runtime: shiny
 ---
 
