@@ -5,7 +5,7 @@ output:
     orientation: columns
     vertical_layout: scroll
     social: menu
-    source_code: 
+    source_code: TRUE
 runtime: shiny
 ---
 
